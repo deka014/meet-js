@@ -1,16 +1,61 @@
 const socket = io("/")
+const videoGrid = document.getElementById("video-grid")
+
 const myPeer = new Peer({
 	host:'peerjs-server.herokuapp.com', 
-	secure:true, 
 	port:443})
 
-myPeer.on('open', function(id) {
-  console.log('My peer ID is: ' + id);
+const myVideo = document.createElement("video")
+	myVideo.muted = true
+const peers = {}
+
+navigator.mediaDevices.getUserMedia({
+	video : true,
+	audio : true
+}).then(stream=> {
+	addVideoStream(myVideo,stream)
+	
+	myPeer.on("call",call=>{
+		call.answer(stream)
+		const video = document.createElement("video")
+		call.on("stream",userVideoStream=>{
+			addVideoStream(video,userVideoStream )
+		})
+	})
+	
+	socket.on("user-connected" , userId =>{
+		connectToNewUser(userId,stream)
+	})
+})
+
+	socket.on("user-disconnected",userId=>{
+		console.log (userId)
+		if (peers[userId]) peers[userId].close()
+		
+	})
+
+myPeer.on('open', id =>{
+  // console.log('My peer ID is: ' + id);
+socket.emit("join-room" , roomId , id  )
 });
 
 
-socket.emit("join-room" , roomId ,  10 )
+function connectToNewUser(userId,stream){
+	const call = myPeer.call(userId,stream)
+	const video = document.createElement("video")
+	call.on("stream", userVideoStream=>{
+		addVideoStream(video,userVideoStream)
+	})
+	call.on("close",()=>{
+		video.remove()
+	})
+	peers[userId]= call
+}
 
-socket.on("user-connected" , userId =>{
-	console.log(userId)
-})
+function addVideoStream(video , stream){
+	video.srcObject = stream 
+	video.addEventListener("loadedmetadata", ()=>{
+		video.play()
+	})
+	videoGrid.append(video)
+}
